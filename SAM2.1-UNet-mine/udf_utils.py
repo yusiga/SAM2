@@ -160,10 +160,10 @@ def sum_saliency_map():
 
 
 if __name__ == '__main__':
-    image_path = '/data1_hdd/gyy/CarDD/instance_image/test/1'
-    mask_path = '/data1_hdd/gyy/CarDD/results/SAM2-UNet/instance/1/test_mask'
-    anno_path = '/data1_hdd/gyy/CarDD/instance_mask/test/1'
-    save_path = '/data1_hdd/gyy/CarDD/results/SAM2-UNet/instance/1/test_overlap'
+    image_path = '/data1_ssd/gyy/CarDD/data/CarDD_SOD/CarDD-TE/CarDD-TE-Image'
+    mask_path = '/data1_hdd/gyy/CarDD/results/adapter/v1/test_mask'
+    anno_path = '/data1_ssd/gyy/CarDD/data/CarDD_SOD/CarDD-TE/CarDD-TE-Mask'
+    save_path = '/data1_hdd/gyy/CarDD/results/adapter/v1/test_overlap'
     mask_overlap(image_path, mask_path, anno_path, save_path)
     evalutate_saliency(mask_path, anno_path)  # anno 是 GT
 

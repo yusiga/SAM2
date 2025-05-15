@@ -51,24 +51,24 @@ class Up(nn.Module):
 
 
 # 适配器，在 Hiera Block 前，与 Hiera Block 一起构成 Encoder Block
-class Adapter(nn.Module):
-    def __init__(self, blk) -> None:
-        super(Adapter, self).__init__()
-        self.block = blk
-        dim = blk.attn.qkv.in_features
-        self.prompt_learn = nn.Sequential(
-            nn.Linear(dim, 32),
-            nn.GELU(),
-            nn.Linear(32, dim),
-            nn.GELU()
-        )
-
-    def forward(self, x):
-        # 线性降维-非线性激活-线性升维-加到原始输入（残差连接）
-        prompt = self.prompt_learn(x)
-        promped = x + prompt
-        net = self.block(promped)
-        return net
+# class Adapter(nn.Module):
+#     def __init__(self, blk) -> None:
+#         super(Adapter, self).__init__()
+#         self.block = blk
+#         dim = blk.attn.qkv.in_features
+#         self.prompt_learn = nn.Sequential(
+#             nn.Linear(dim, 32),
+#             nn.GELU(),
+#             nn.Linear(32, dim),
+#             nn.GELU()
+#         )
+#
+#     def forward(self, x):
+#         # 线性降维-非线性激活-线性升维-加到原始输入（残差连接）
+#         prompt = self.prompt_learn(x)
+#         promped = x + prompt
+#         net = self.block(promped)
+#         return net
     
 
 class BasicConv2d(nn.Module):
@@ -144,16 +144,22 @@ class SAM2UNet(nn.Module):
         del model.image_encoder.neck
         self.encoder = model.image_encoder.trunk
 
-        for param in self.encoder.parameters():
-            param.requires_grad = False
-        blocks = []
-        for block in self.encoder.blocks:
-            blocks.append(
-                Adapter(block)
-            )
-        self.encoder.blocks = nn.Sequential(
-            *blocks
-        )
+        # for param in self.encoder.parameters():
+        #     param.requires_grad = False
+
+        # 只解冻 Adapter
+        for name, param in self.encoder.named_parameters():
+            if "Adapter" not in name:
+                param.requires_grad = False
+
+        # blocks = []
+        # for block in self.encoder.blocks:
+        #     blocks.append(
+        #         Adapter(block)
+        #     )
+        # self.encoder.blocks = nn.Sequential(
+        #     *blocks
+        # )
         # 经过 RFB 后的输出
         self.rfb1 = RFB_modified(144, 64)
         self.rfb2 = RFB_modified(288, 64)

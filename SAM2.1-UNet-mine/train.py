@@ -44,7 +44,15 @@ def main(args):
     device = torch.device("cuda")
     model = SAM2UNet(args.hiera_path)
     model.to(device)
-    optim = opt.AdamW([{"params": model.parameters(), "initia_lr": args.lr}], lr=args.lr,
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    # 打印确认训练的参数
+    print("Trainable parameters:")
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(f"  {name}")
+    print(f"Total trainable params: {sum(p.numel() for p in trainable_params)}")
+
+    optim = opt.AdamW([{"params": trainable_params, "initia_lr": args.lr}], lr=args.lr,
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingLR(optim, args.epoch, eta_min=1.0e-7)
     os.makedirs(args.save_path, exist_ok=True)
