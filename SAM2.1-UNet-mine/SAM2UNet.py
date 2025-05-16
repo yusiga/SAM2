@@ -51,9 +51,9 @@ class Up(nn.Module):
 
 
 # 适配器，在 Hiera Block 前，与 Hiera Block 一起构成 Encoder Block
-# class Adapter(nn.Module):
+# class OriginAdapter(nn.Module):
 #     def __init__(self, blk) -> None:
-#         super(Adapter, self).__init__()
+#         super(OriginAdapter, self).__init__()
 #         self.block = blk
 #         dim = blk.attn.qkv.in_features
 #         self.prompt_learn = nn.Sequential(
@@ -155,7 +155,7 @@ class SAM2UNet(nn.Module):
         # blocks = []
         # for block in self.encoder.blocks:
         #     blocks.append(
-        #         Adapter(block)
+        #         OriginAdapter(block)
         #     )
         # self.encoder.blocks = nn.Sequential(
         #     *blocks

@@ -17,6 +17,10 @@ parser.add_argument("--train_image_path", type=str, required=True,
                     help="path to the image that used to train the model")
 parser.add_argument("--train_mask_path", type=str, required=True,
                     help="path to the mask file for training")
+parser.add_argument("--val_image_path", type=str, required=True,
+                    help="path to the image used for validation")
+parser.add_argument("--val_mask_path", type=str, required=True,
+                    help="path to the mask file for validation")
 parser.add_argument('--save_path', type=str, required=True,
                     help="path to store the checkpoint")
 parser.add_argument("--epoch", type=int, default=20,
@@ -39,25 +43,42 @@ def structure_loss(pred, mask):
 
 
 def main(args):
-    dataset = FullDataset(args.train_image_path, args.train_mask_path, 352, mode='train')
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=8)
+    # 日志文件路径
+    log_path = os.path.join(args.save_path, "train_log.txt")
+    os.makedirs(args.save_path, exist_ok=True)
+
+    # 打开日志文件
+    log_file = open(log_path, "w")
+
+    # dataset = FullDataset(args.train_image_path, args.train_mask_path, 352, mode='train')
+    # dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=8)
+
+    train_dataset = FullDataset(args.train_image_path, args.train_mask_path, 352, mode='train')
+    val_dataset = FullDataset(args.val_image_path, args.val_mask_path, 352, mode='val')
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4)
+
     device = torch.device("cuda")
     model = SAM2UNet(args.hiera_path)
     model.to(device)
+
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     # 打印确认训练的参数
-    print("Trainable parameters:")
+    log_file.write("Trainable parameters:\n")
     for name, param in model.named_parameters():
         if param.requires_grad:
-            print(f"  {name}")
-    print(f"Total trainable params: {sum(p.numel() for p in trainable_params)}")
+            line = f"  {name}\n"
+            log_file.write(line)
+    total_params = sum(p.numel() for p in trainable_params)
+    log_file.write(f"Total trainable params: {total_params}\n")
 
     optim = opt.AdamW([{"params": trainable_params, "initia_lr": args.lr}], lr=args.lr,
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingLR(optim, args.epoch, eta_min=1.0e-7)
     os.makedirs(args.save_path, exist_ok=True)
     for epoch in range(args.epoch):
-        for i, batch in enumerate(dataloader):
+        model.train()
+        for i, batch in enumerate(train_loader):
             x = batch['image']
             target = batch['label']
             x = x.to(device)
@@ -71,12 +92,34 @@ def main(args):
             loss.backward()
             optim.step()
             if i % 50 == 0:
-                print("epoch:{}-{}: loss:{}".format(epoch + 1, i + 1, loss.item()))
+                log_str = "epoch:{}-{}: loss:{}".format(epoch + 1, i + 1, loss.item())
+                print(log_str)
+                log_file.write(log_str + "\n")
 
         scheduler.step()
+
+        model.eval()
+        val_loss_total = 0
+        with torch.no_grad():
+            for val_batch in val_loader:
+                x_val = val_batch['image'].to(device)
+                target_val = val_batch['label'].to(device)
+                pred0, pred1, pred2 = model(x_val)
+                val_loss = (structure_loss(pred0, target_val) +
+                            structure_loss(pred1, target_val) +
+                            structure_loss(pred2, target_val))
+                val_loss_total += val_loss.item()
+
+        avg_val_loss = val_loss_total / len(val_loader)
+        log_str = f"Epoch {epoch + 1}: Validation Loss: {avg_val_loss}"
+        print(log_str)
+        log_file.write(log_str + "\n")
+
+
         if (epoch + 1) % 5 == 0 or (epoch + 1) == args.epoch:
             torch.save(model.state_dict(), os.path.join(args.save_path, 'SAM2-UNet-%d.pth' % (epoch + 1)))
             print('[Saving Snapshot:]', os.path.join(args.save_path, 'SAM2-UNet-%d.pth' % (epoch + 1)))
+    log_file.close()
 
 
 # def seed_torch(seed=1024):
