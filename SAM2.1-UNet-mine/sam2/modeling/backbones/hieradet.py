@@ -125,7 +125,9 @@ class MultiScaleBlock(nn.Module):
 
         self.MLP_Adapter = Adapter(adapter_dim, skip_connect=False)  # MLP-adapter, no skip connection
         self.Space_Adapter = Adapter(adapter_dim)  # with skip connection
-        self.scale = scale
+
+        # self.scale = scale
+        self.scale = nn.Parameter(torch.tensor(scale, dtype=torch.float32))
 
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
@@ -188,7 +190,7 @@ class Hiera(nn.Module):
             self,
             embed_dim: int = 96,  # 初始的嵌入维度
             num_heads: int = 1,  # 初始多头注意力的头数
-            drop_path_rate: float = 0.0,  # Stochastic Depth 的丢弃率
+            drop_path_rate: float = 0.15,  # Stochastic Depth 的丢弃率
             q_pool: int = 3,  # 应用下采样 (q_pool) 的阶段数
             q_stride: Tuple[int, int] = (2, 2),  # 下采样步长
             stages: Tuple[int, ...] = (2, 3, 16, 3),  # 每个 stage 的 Block 数
@@ -238,6 +240,7 @@ class Hiera(nn.Module):
             torch.zeros(1, embed_dim, self.window_spec[0], self.window_spec[0])
         )
 
+        # 逐层递增 DropPath 概率
         dpr = [
             x.item() for x in torch.linspace(0, drop_path_rate, depth)
         ]  # stochastic depth decay rule

@@ -25,7 +25,7 @@ parser.add_argument('--save_path', type=str, required=True,
                     help="path to store the checkpoint")
 parser.add_argument("--epoch", type=int, default=20,
                     help="training epochs")
-parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
+parser.add_argument("--lr", type=float, default=3e-4, help="learning rate")
 parser.add_argument("--batch_size", default=12, type=int)
 parser.add_argument("--weight_decay", default=5e-4, type=float)
 args = parser.parse_args()
@@ -40,6 +40,26 @@ def structure_loss(pred, mask):
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
     return (wbce + wiou).mean()
+
+
+class EMA:
+    def __init__(self, model, decay=0.999):
+        self.shadow = {}
+        self.decay = decay
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = param.data.clone()
+
+    def update(self, model):
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                new_avg = (1.0 - self.decay) * param.data + self.decay * self.shadow[name]
+                self.shadow[name] = new_avg.clone()
+
+    def apply_shadow(self, model):
+        for name, param in model.named_parameters():
+            if name in self.shadow:
+                param.data.copy_(self.shadow[name])
 
 
 def main(args):
@@ -72,10 +92,19 @@ def main(args):
     total_params = sum(p.numel() for p in trainable_params)
     log_file.write(f"Total trainable params: {total_params}\n")
 
-    optim = opt.AdamW([{"params": trainable_params, "initia_lr": args.lr}], lr=args.lr,
-                      weight_decay=args.weight_decay)
-    scheduler = CosineAnnealingLR(optim, args.epoch, eta_min=1.0e-7)
-    os.makedirs(args.save_path, exist_ok=True)
+    # optim = opt.AdamW([{"params": trainable_params, "initial_lr": args.lr}], lr=args.lr,
+    #                   weight_decay=args.weight_decay)
+    optim = opt.AdamW(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
+
+    # CosineAnnealing + Warmup
+    warmup_epochs = 5
+    # scheduler = CosineAnnealingLR(optim, args.epoch, eta_min=1.0e-7)
+    scheduler = CosineAnnealingLR(optim, T_max=args.epoch - warmup_epochs, eta_min=1e-7)
+    # EMA
+    ema = EMA(model)
+
+    best_val_loss = float('inf')
+
     for epoch in range(args.epoch):
         model.train()
         for i, batch in enumerate(train_loader):
@@ -90,13 +119,20 @@ def main(args):
             loss2 = structure_loss(pred2, target)
             loss = loss0 + loss1 + loss2
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # Gradient Clipping
             optim.step()
+            ema.update(model)  # 更新 EMA
             if i % 50 == 0:
                 log_str = "epoch:{}-{}: loss:{}".format(epoch + 1, i + 1, loss.item())
                 print(log_str)
                 log_file.write(log_str + "\n")
 
-        scheduler.step()
+        # Warmup 阶段线性调整 lr
+        if epoch < warmup_epochs:
+            for param_group in optim.param_groups:
+                param_group['lr'] = args.lr * (epoch + 1) / warmup_epochs
+        else:
+            scheduler.step()
 
         model.eval()
         val_loss_total = 0
@@ -115,10 +151,19 @@ def main(args):
         print(log_str)
         log_file.write(log_str + "\n")
 
+        # 使用 EMA 参数保存模型
+        ema.apply_shadow(model)
+        # 保存验证集 loss 最低的模型
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), os.path.join(args.save_path, 'best_model.pth'))
+            print('[Saved best model]')
 
         if (epoch + 1) % 5 == 0 or (epoch + 1) == args.epoch:
             torch.save(model.state_dict(), os.path.join(args.save_path, 'SAM2-UNet-%d.pth' % (epoch + 1)))
             print('[Saving Snapshot:]', os.path.join(args.save_path, 'SAM2-UNet-%d.pth' % (epoch + 1)))
+        # 恢复原模型参数继续训练
+        model.load_state_dict({name: param.clone() for name, param in ema.shadow.items()}, strict=False)
     log_file.close()
 
 
