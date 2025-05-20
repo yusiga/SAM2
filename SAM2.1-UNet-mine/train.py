@@ -25,7 +25,7 @@ parser.add_argument('--save_path', type=str, required=True,
                     help="path to store the checkpoint")
 parser.add_argument("--epoch", type=int, default=20,
                     help="training epochs")
-parser.add_argument("--lr", type=float, default=3e-4, help="learning rate")
+parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
 parser.add_argument("--batch_size", default=12, type=int)
 parser.add_argument("--weight_decay", default=5e-4, type=float)
 args = parser.parse_args()
@@ -46,6 +46,7 @@ class EMA:
     def __init__(self, model, decay=0.999):
         self.shadow = {}
         self.decay = decay
+        self.backup = {}
         for name, param in model.named_parameters():
             if param.requires_grad:
                 self.shadow[name] = param.data.clone()
@@ -60,6 +61,19 @@ class EMA:
         for name, param in model.named_parameters():
             if name in self.shadow:
                 param.data.copy_(self.shadow[name])
+
+    def backup_and_apply(self, model):
+        self.backup = {}
+        for name, param in model.named_parameters():
+            if name in self.shadow:
+                self.backup[name] = param.data.clone()
+                param.data.copy_(self.shadow[name])
+
+    def restore(self, model):
+        for name, param in model.named_parameters():
+            if name in self.backup:
+                param.data.copy_(self.backup[name])
+        self.backup = {}
 
 
 def main(args):
@@ -152,18 +166,17 @@ def main(args):
         log_file.write(log_str + "\n")
 
         # 使用 EMA 参数保存模型
-        ema.apply_shadow(model)
+        ema.backup_and_apply(model)
         # 保存验证集 loss 最低的模型
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), os.path.join(args.save_path, 'best_model.pth'))
             print('[Saved best model]')
-
         if (epoch + 1) % 5 == 0 or (epoch + 1) == args.epoch:
             torch.save(model.state_dict(), os.path.join(args.save_path, 'SAM2-UNet-%d.pth' % (epoch + 1)))
             print('[Saving Snapshot:]', os.path.join(args.save_path, 'SAM2-UNet-%d.pth' % (epoch + 1)))
         # 恢复原模型参数继续训练
-        model.load_state_dict({name: param.clone() for name, param in ema.shadow.items()}, strict=False)
+        ema.restore(model)
     log_file.close()
 
 

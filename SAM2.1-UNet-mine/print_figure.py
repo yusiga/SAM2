@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 train_losses = []
 val_losses = []
 
-with open("loss_log.txt", "r") as f:
+with open("train_log.txt", "r") as f:
     lines = f.readlines()
     current_epoch = None
     last_train_loss = None
