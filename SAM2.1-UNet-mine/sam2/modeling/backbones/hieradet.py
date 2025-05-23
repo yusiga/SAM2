@@ -190,7 +190,7 @@ class Hiera(nn.Module):
             self,
             embed_dim: int = 96,  # 初始的嵌入维度
             num_heads: int = 1,  # 初始多头注意力的头数
-            drop_path_rate: float = 0.1,  # Stochastic Depth 的丢弃率
+            drop_path_rate: float = 0.2,  # Stochastic Depth 的丢弃率
             q_pool: int = 3,  # 应用下采样 (q_pool) 的阶段数
             q_stride: Tuple[int, int] = (2, 2),  # 下采样步长
             stages: Tuple[int, ...] = (2, 3, 16, 3),  # 每个 stage 的 Block 数

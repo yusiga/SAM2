@@ -6,6 +6,6 @@ python train.py \
 --val_image_path "/data1_ssd/gyy/CarDD/data/CarDD_SOD/CarDD-VAL/CarDD-VAL-Image/" \
 --val_mask_path "/data1_ssd/gyy/CarDD/data/CarDD_SOD/CarDD-VAL/CarDD-VAL-Mask/" \
 --save_path "/data1_hdd/gyy/CarDD/cp/adapter/v1/" \
---epoch 100 \
---lr 5e-4 \
---batch_size 16
+--epoch 50 \
+--lr 0.001 \
+--batch_size 12

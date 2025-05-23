@@ -10,8 +10,8 @@ class Adapter(nn.Module):
         self.skip_connect = skip_connect
         # self.D_hidden_features = int(D_features * mlp_ratio)
         self.act = act_layer()
-        self.D_fc1 = nn.Linear(D_features, 16)
-        self.D_fc2 = nn.Linear(16, D_features)
+        self.D_fc1 = nn.Linear(D_features, 32)
+        self.D_fc2 = nn.Linear(32, D_features)
         
     def forward(self, x):
         xs = self.D_fc1(x)

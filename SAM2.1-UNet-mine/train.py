@@ -39,7 +39,8 @@ def structure_loss(pred, mask):
     inter = ((pred * mask) * weit).sum(dim=(2, 3))
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
-    return (wbce + wiou).mean()
+    reg_term = torch.mean(pred ** 2)
+    return (wbce + wiou).mean() + 0.01 * reg_term
 
 
 class EMA:
@@ -111,7 +112,7 @@ def main(args):
     optim = opt.AdamW(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
 
     # CosineAnnealing + Warmup
-    warmup_epochs = 5
+    warmup_epochs = min(10, args.epoch // 5)
     # scheduler = CosineAnnealingLR(optim, args.epoch, eta_min=1.0e-7)
     scheduler = CosineAnnealingLR(optim, T_max=args.epoch - warmup_epochs, eta_min=1e-7)
     # EMA
