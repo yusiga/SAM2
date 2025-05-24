@@ -20,7 +20,7 @@ from sam2.modeling.backbones.utils import (
 )
 
 from sam2.modeling.sam2_utils import DropPath, MLP
-from sam2.modeling.common.mona import Mona
+from sam2.modeling.common.adapter import Adapter
 
 
 def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.Tensor:
@@ -90,9 +90,10 @@ class MultiScaleBlock(nn.Module):
             dim_out: int,
             num_heads: int,
             mlp_ratio: float = 4.0,
+            scale: float = 0.5,
             drop_path: float = 0.0,
             norm_layer: Union[nn.Module, str] = "LayerNorm",
-            q_stride: Tuple[int, int] = None,  # Q下采样的步长（多尺度）
+            q_stride: Tuple[int, int] = None, # Q下采样的步长（多尺度）
             act_layer: nn.Module = nn.GELU,
             window_size: int = 0,
     ):
@@ -120,8 +121,13 @@ class MultiScaleBlock(nn.Module):
             q_pool=self.pool,
         )
 
-        self.mona_1 = Mona(dim_out, 8)
-        self.mona_2 = Mona(dim_out, 8)
+        adapter_dim = dim_out
+
+        self.MLP_Adapter = Adapter(adapter_dim, skip_connect=False)  # MLP-adapter, no skip connection
+        self.Space_Adapter = Adapter(adapter_dim)  # with skip connection
+
+        # self.scale = scale
+        self.scale = nn.Parameter(torch.tensor(scale, dtype=torch.float32))
 
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
@@ -153,6 +159,7 @@ class MultiScaleBlock(nn.Module):
 
         # Window Attention + Q Pooling (if stage change)
         x = self.attn(x)
+        x = self.Space_Adapter(x)
 
         if self.q_stride:
             # Shapes have changed due to Q pooling
@@ -166,15 +173,11 @@ class MultiScaleBlock(nn.Module):
         if self.window_size > 0:
             x = window_unpartition(x, window_size, pad_hw, (H, W))
 
-        H, W = x.shape[1], x.shape[2]
-
         x = shortcut + self.drop_path(x)
-        x = self.mona_1(x, (H, W))
-
         # MLP
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        x = self.mona_2(x, (H, W))
-
+        # 原代码：x = x + self.drop_path(self.mlp(self.norm2(x)))
+        xn = self.norm2(x)
+        x = x + self.drop_path(self.mlp(xn)) + self.scale * self.MLP_Adapter(xn)
         return x
 
 

@@ -147,9 +147,9 @@ class SAM2UNet(nn.Module):
         # for param in self.encoder.parameters():
         #     param.requires_grad = False
 
-        # 只解冻 Adapter
+        # 只解冻 mona
         for name, param in self.encoder.named_parameters():
-            if "Adapter" not in name:
+            if "mona" not in name:
                 param.requires_grad = False
 
         # blocks = []
